@@ -9,6 +9,7 @@ import DragNumberPuzzle from '@/components/puzzle/DragNumberPuzzle';
 import PhotonMatchPuzzle from '@/components/puzzle/PhotonMatchPuzzle';
 import OrbitPuzzle from '@/components/puzzle/OrbitPuzzle';
 import SchrodingerPuzzle from '@/components/puzzle/SchrodingerPuzzle';
+import EntanglementPuzzle from '@/components/puzzle/EntanglementPuzzle';
 import RecordingPlayer from '@/components/puzzle/RecordingPlayer';
 import FeedbackOverlay from '@/components/puzzle/FeedbackOverlay';
 
@@ -131,6 +132,17 @@ const Puzzle = () => {
           <SchrodingerPuzzle
             key={puzzleKey}
             puzzle={scientist.puzzle}
+            onCorrect={handleCorrect}
+            onIncorrect={handleIncorrect}
+            disabled={disabled}
+          />
+        );
+      case 'entanglement-match':
+        return (
+          <EntanglementPuzzle
+            key={puzzleKey}
+            puzzle={scientist.puzzle}
+            anecdotes={scientist.anecdotes}
             onCorrect={handleCorrect}
             onIncorrect={handleIncorrect}
             disabled={disabled}

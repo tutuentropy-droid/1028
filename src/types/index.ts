@@ -1,4 +1,4 @@
-export type PuzzleType = 'drag-number' | 'photon-match' | 'drag-orbit' | 'schrodinger-quiz';
+export type PuzzleType = 'drag-number' | 'photon-match' | 'drag-orbit' | 'schrodinger-quiz' | 'entanglement-match';
 
 export interface PuzzleTarget {
   id: string;
@@ -42,6 +42,14 @@ export interface ScientistConcept {
   history: string;
 }
 
+export interface ScientistAnecdote {
+  id: string;
+  title: string;
+  scientist: string;
+  content: string;
+  year?: string;
+}
+
 export interface Scientist {
   id: string;
   name: string;
@@ -52,4 +60,5 @@ export interface Scientist {
   concept: ScientistConcept;
   puzzle: Puzzle;
   recording: Recording;
+  anecdotes?: ScientistAnecdote[];
 }
