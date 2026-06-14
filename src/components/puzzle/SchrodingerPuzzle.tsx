@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Zap, Cat } from 'lucide-react';
+import { Zap, Cat, RotateCcw } from 'lucide-react';
 import { useGameStore } from '@/store/gameStore';
 import type { Puzzle } from '@/types';
 
@@ -37,17 +37,17 @@ const SchrodingerPuzzle = ({ puzzle, onCorrect, onIncorrect, disabled }: Schrodi
     consumeCatEmojiReward,
   } = useGameStore();
 
+  const [roundKey, setRoundKey] = useState(0);
   const [hasAnswered, setHasAnswered] = useState(false);
-  const [isCollapsed, setIsCollapsed] = useState(false);
   const [selectedAnswerId, setSelectedAnswerId] = useState<string | null>(null);
   const [showResult, setShowResult] = useState<'correct' | 'incorrect' | null>(null);
   const [isOscillating, setIsOscillating] = useState(true);
   const [swapToggle, setSwapToggle] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState(OSCILLATION_DURATION);
 
-  const oscillationStartRef = useRef<number>(Date.now());
   const swapIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const oscillationStartRef = useRef<number>(Date.now());
 
   const correctOption = useMemo(() => {
     return puzzle.options.find((o) => o.id === puzzle.correctAnswerId);
@@ -88,13 +88,21 @@ const SchrodingerPuzzle = ({ puzzle, onCorrect, onIncorrect, disabled }: Schrodi
     }
   }, []);
 
-  const finalizeAnswer = useCallback(
-    (answerId: string, wasOscillating: boolean) => {
-      if (hasAnswered) return;
+  const stopOscillation = useCallback(() => {
+    if (swapIntervalRef.current) {
+      clearInterval(swapIntervalRef.current);
+      swapIntervalRef.current = null;
+    }
+    setIsOscillating(false);
+  }, []);
 
+  const handleSelect = useCallback(
+    (answerId: string) => {
+      if (disabled || hasAnswered) return;
+
+      const wasOscillating = isOscillating;
       cleanup();
       setIsOscillating(false);
-      setIsCollapsed(true);
       setSelectedAnswerId(answerId);
       setHasAnswered(true);
 
@@ -106,7 +114,7 @@ const SchrodingerPuzzle = ({ puzzle, onCorrect, onIncorrect, disabled }: Schrodi
 
       setTimeout(() => {
         setShowResult(isCorrect ? 'correct' : 'incorrect');
-      }, 600);
+      }, 500);
 
       setTimeout(() => {
         if (isCorrect) {
@@ -117,35 +125,38 @@ const SchrodingerPuzzle = ({ puzzle, onCorrect, onIncorrect, disabled }: Schrodi
         } else {
           onIncorrect();
         }
-      }, 2000);
+      }, 1800);
     },
     [
+      disabled,
       hasAnswered,
+      isOscillating,
       puzzle.correctAnswerId,
+      cleanup,
       recordSuperpositionGuess,
       catEmojiRewardActive,
       consumeCatEmojiReward,
       onCorrect,
       onIncorrect,
-      cleanup,
     ]
   );
 
-  const handleSelect = useCallback(
-    (answerId: string) => {
-      if (disabled || hasAnswered) return;
-      finalizeAnswer(answerId, isOscillating);
-    },
-    [disabled, hasAnswered, isOscillating, finalizeAnswer]
-  );
-
   const handleCollapse = useCallback(() => {
-    if (disabled || hasAnswered) return;
-    const randomId = displayedAnswers[Math.floor(Math.random() * displayedAnswers.length)]?.id;
-    if (randomId) {
-      finalizeAnswer(randomId, isOscillating);
-    }
-  }, [disabled, hasAnswered, displayedAnswers, isOscillating, finalizeAnswer]);
+    if (disabled || hasAnswered || !isOscillating) return;
+    stopOscillation();
+  }, [disabled, hasAnswered, isOscillating, stopOscillation]);
+
+  const handleRetry = useCallback(() => {
+    if (disabled) return;
+    cleanup();
+    setRoundKey((k) => k + 1);
+    setHasAnswered(false);
+    setSelectedAnswerId(null);
+    setShowResult(null);
+    setIsOscillating(true);
+    setSwapToggle(false);
+    setTimeRemaining(OSCILLATION_DURATION);
+  }, [disabled, cleanup]);
 
   useEffect(() => {
     if (disabled || hasAnswered) return;
@@ -162,22 +173,24 @@ const SchrodingerPuzzle = ({ puzzle, onCorrect, onIncorrect, disabled }: Schrodi
       setTimeRemaining(remaining);
 
       if (remaining <= 0) {
-        const randomId =
-          displayedAnswers[Math.floor(Math.random() * displayedAnswers.length)]?.id;
-        if (randomId) {
-          finalizeAnswer(randomId, false);
+        stopOscillation();
+        if (countdownIntervalRef.current) {
+          clearInterval(countdownIntervalRef.current);
+          countdownIntervalRef.current = null;
         }
       }
     }, 50);
 
     return cleanup;
-  }, [disabled, hasAnswered, displayedAnswers, finalizeAnswer, cleanup]);
+  }, [disabled, hasAnswered, roundKey, cleanup, stopOscillation]);
 
   const progressPercent = (timeRemaining / OSCILLATION_DURATION) * 100;
   const superpositionAccuracy =
     superpositionTotalGuesses > 0
       ? Math.round((superpositionCorrectGuesses / superpositionTotalGuesses) * 100)
       : 0;
+
+  const isResultIncorrect = showResult === 'incorrect';
 
   return (
     <div className="space-y-8">
@@ -242,6 +255,7 @@ const SchrodingerPuzzle = ({ puzzle, onCorrect, onIncorrect, disabled }: Schrodi
       </motion.div>
 
       <motion.div
+        key={roundKey}
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ delay: 0.35, type: 'spring' }}
@@ -262,21 +276,27 @@ const SchrodingerPuzzle = ({ puzzle, onCorrect, onIncorrect, disabled }: Schrodi
               animate={{ width: `${progressPercent}%` }}
               transition={{ duration: 0.05 }}
               style={{
-                background:
-                  progressPercent > 40
+                background: isOscillating
+                  ? progressPercent > 40
                     ? 'linear-gradient(90deg, #9d4edd, #00d4ff)'
                     : progressPercent > 20
                     ? 'linear-gradient(90deg, #ff6b35, #ffb800)'
-                    : 'linear-gradient(90deg, #ff2e63, #ff6b35)',
-                boxShadow:
-                  progressPercent > 40
+                    : 'linear-gradient(90deg, #ff2e63, #ff6b35)'
+                  : 'linear-gradient(90deg, #39ff14, #00d4ff)',
+                boxShadow: isOscillating
+                  ? progressPercent > 40
                     ? '0 0 10px rgba(157, 78, 221, 0.6)'
-                    : '0 0 10px rgba(255, 46, 99, 0.6)',
+                    : '0 0 10px rgba(255, 46, 99, 0.6)'
+                  : '0 0 10px rgba(57, 255, 20, 0.6)',
               }}
             />
           </div>
           <p className="text-xs text-indigo-400/60">
-            {isOscillating ? '波函数正在振荡...快做选择！' : '波函数已坍缩'}
+            {isOscillating
+              ? '⚡ 波函数正在振荡...快做选择！'
+              : hasAnswered
+              ? '波函数已坍缩'
+              : '✨ 波函数已稳定，放心选择吧'}
           </p>
         </div>
 
@@ -292,14 +312,20 @@ const SchrodingerPuzzle = ({ puzzle, onCorrect, onIncorrect, disabled }: Schrodi
 
             return (
               <motion.button
-                key={`${answer.id}-${side}`}
+                key={`${answer.id}-${side}-${roundKey}`}
                 onClick={() => handleSelect(answer.id)}
                 disabled={disabled || hasAnswered}
                 initial={{ opacity: 0, x: side === 'left' ? -30 : 30 }}
                 animate={{
-                  opacity: hasAnswered ? (isSelected ? 1 : 0.4) : isOscillating ? 0.75 : 1,
+                  opacity: hasAnswered
+                    ? isSelected
+                      ? 1
+                      : 0.4
+                    : isOscillating
+                    ? 0.78
+                    : 1,
                   x: 0,
-                  scale: isSelected ? [1, 1.03, 1] : 1,
+                  scale: isSelected ? [1, 1.02, 1] : 1,
                 }}
                 transition={{
                   delay: 0.4 + idx * 0.05,
@@ -320,6 +346,8 @@ const SchrodingerPuzzle = ({ puzzle, onCorrect, onIncorrect, disabled }: Schrodi
                         : 'border-glow-red bg-glow-red/10'
                       : showCorrectness && isCorrectAnswer
                       ? 'border-glow-green/50 bg-glow-green/5'
+                      : !hasAnswered && !isOscillating
+                      ? 'border-glow-cyan/50 bg-quantum-800/70 hover:border-glow-cyan hover:bg-quantum-700/70'
                       : 'border-glow-purple/40 bg-quantum-800/50 hover:border-glow-purple/70 hover:bg-quantum-700/50'
                   }
                   ${disabled || hasAnswered ? 'cursor-default' : 'cursor-pointer'}
@@ -331,17 +359,19 @@ const SchrodingerPuzzle = ({ puzzle, onCorrect, onIncorrect, disabled }: Schrodi
                       ? '0 0 30px rgba(57, 255, 20, 0.3)'
                       : showCorrectness && isSelected && !isCorrectAnswer
                       ? '0 0 30px rgba(255, 46, 99, 0.3)'
+                      : !hasAnswered && !isOscillating
+                      ? '0 0 20px rgba(0, 212, 255, 0.2)'
                       : !hasAnswered
-                      ? '0 0 20px rgba(157, 78, 221, 0.1)'
+                      ? '0 0 20px rgba(157, 78, 221, 0.15)'
                       : undefined,
                 }}
               >
                 {isOscillating && !hasAnswered && (
                   <motion.div
-                    className="absolute inset-0 rounded-xl border-2 border-glow-purple/20"
+                    className="absolute inset-0 rounded-xl border-2 border-glow-purple/25 pointer-events-none"
                     animate={{
-                      x: ['-6px', '6px', '-6px'],
-                      opacity: [0.3, 0.6, 0.3],
+                      x: ['-5px', '5px', '-5px'],
+                      opacity: [0.4, 0.7, 0.4],
                     }}
                     transition={{
                       duration: 0.7,
@@ -365,10 +395,17 @@ const SchrodingerPuzzle = ({ puzzle, onCorrect, onIncorrect, disabled }: Schrodi
                         {isCorrectAnswer ? '✓ 正确' : '✗ 错误'}
                       </span>
                     )}
+                    {!hasAnswered && !isOscillating && (
+                      <span className="text-xs text-glow-cyan font-medium">
+                        稳定态
+                      </span>
+                    )}
                   </div>
                   <p className="text-lg font-medium text-white">{answer.label}</p>
                   {answer.value && answer.value !== answer.label && (
-                    <p className="text-sm text-indigo-300/70 mt-1">{answer.value}</p>
+                    <p className="text-sm text-indigo-300/70 mt-1">
+                      {answer.value}
+                    </p>
                   )}
                 </div>
               </motion.button>
@@ -377,31 +414,50 @@ const SchrodingerPuzzle = ({ puzzle, onCorrect, onIncorrect, disabled }: Schrodi
         </div>
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <motion.button
-            onClick={handleCollapse}
-            disabled={disabled || hasAnswered}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.7 }}
-            whileHover={!disabled && !hasAnswered ? { scale: 1.05 } : {}}
-            whileTap={!disabled && !hasAnswered ? { scale: 0.95 } : {}}
-            className={`
-              px-6 py-3 rounded-xl font-medium flex items-center gap-2
-              border-2 transition-all
-              ${
-                disabled || hasAnswered
-                  ? 'border-gray-600/30 bg-gray-800/20 text-gray-500 cursor-not-allowed'
-                  : 'border-glow-orange/50 bg-glow-orange/10 text-glow-orange hover:bg-glow-orange/20 hover:border-glow-orange hover:shadow-glow-orange'
-              }
-            `}
-          >
-            <Zap className="w-5 h-5" />
-            <span>坍缩！强制锁定</span>
-          </motion.button>
+          {!hasAnswered && isOscillating && (
+            <motion.button
+              onClick={handleCollapse}
+              disabled={disabled}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.7 }}
+              whileHover={!disabled ? { scale: 1.05 } : {}}
+              whileTap={!disabled ? { scale: 0.95 } : {}}
+              className="px-6 py-3 rounded-xl font-medium flex items-center gap-2
+                border-2 transition-all
+                border-glow-orange/50 bg-glow-orange/10 text-glow-orange 
+                hover:bg-glow-orange/20 hover:border-glow-orange hover:shadow-glow-orange
+                disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Zap className="w-5 h-5" />
+              <span>坍缩！让答案稳定</span>
+            </motion.button>
+          )}
+
+          {isResultIncorrect && (
+            <motion.button
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.3, type: 'spring' }}
+              onClick={handleRetry}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="px-6 py-3 rounded-xl font-medium flex items-center gap-2
+                border-2 transition-all
+                border-glow-cyan/50 bg-glow-cyan/10 text-glow-cyan
+                hover:bg-glow-cyan/20 hover:border-glow-cyan hover:shadow-glow-cyan"
+            >
+              <RotateCcw className="w-5 h-5" />
+              <span>再试一次</span>
+            </motion.button>
+          )}
 
           <p className="text-xs text-indigo-400/60 max-w-xs">
-            💡 点击任一答案框即可选择；答案振荡时选对将计入"叠加正确率"。
-            连续三次叠加态答对可获得猫咪奖励！
+            {isOscillating && !hasAnswered
+              ? '💡 振荡时点选 = 叠加态猜测（计入连胜）；点击"坍缩"或等倒计时结束后点选 = 稳定态选择。'
+              : !hasAnswered
+              ? '💡 答案已稳定，现在点选不会计入叠加正确率。'
+              : ''}
           </p>
         </div>
       </motion.div>
@@ -421,11 +477,10 @@ const SchrodingerPuzzle = ({ puzzle, onCorrect, onIncorrect, disabled }: Schrodi
             {showResult === 'correct' ? (
               <p className="text-glow-green font-medium">
                 ✨ 波函数坍缩至正确本征态！
-                {superpositionConsecutiveCorrect >= 2 && isOscillating === false && '叠加态猜中！'}
               </p>
             ) : (
               <p className="text-glow-red font-medium">
-                ⚠️ 坍缩到了错误的状态...再试一次！
+                ⚠️ 坍缩到了错误的状态...点击"再试一次"重新挑战吧！
               </p>
             )}
           </motion.div>
