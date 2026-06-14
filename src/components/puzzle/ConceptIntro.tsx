@@ -4,7 +4,7 @@ import type { ScientistConcept } from '@/types';
 
 interface ConceptIntroProps {
   concept: ScientistConcept;
-  accentColor?: 'cyan' | 'purple' | 'orange';
+  accentColor?: 'cyan' | 'purple' | 'orange' | 'green';
 }
 
 const ConceptIntro = ({ concept, accentColor = 'cyan' }: ConceptIntroProps) => {
@@ -16,6 +16,8 @@ const ConceptIntro = ({ concept, accentColor = 'cyan' }: ConceptIntroProps) => {
         return 'text-glow-purple';
       case 'orange':
         return 'text-glow-orange';
+      case 'green':
+        return 'text-glow-green';
       default:
         return 'text-glow-cyan';
     }
@@ -29,6 +31,8 @@ const ConceptIntro = ({ concept, accentColor = 'cyan' }: ConceptIntroProps) => {
         return 'glass-card-purple';
       case 'orange':
         return 'glass-card-orange';
+      case 'green':
+        return 'glass-card-green';
       default:
         return 'glass-card';
     }

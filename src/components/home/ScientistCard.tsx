@@ -11,10 +11,10 @@ interface ScientistCardProps {
 
 const ScientistCard = ({ scientist, index }: ScientistCardProps) => {
   const navigate = useNavigate();
-  const { isPuzzleCompleted, isRecordingUnlocked } = useGameStore();
+  const { isPuzzleCompleted, isRecordingUnlocked, specialLevelUnlocked } = useGameStore();
 
   const isCompleted = isPuzzleCompleted(scientist.id);
-  const isUnlocked = true;
+  const isUnlocked = !scientist.isSpecial || specialLevelUnlocked;
 
   const getCardStyle = () => {
     switch (scientist.accentColor) {
@@ -24,6 +24,8 @@ const ScientistCard = ({ scientist, index }: ScientistCardProps) => {
         return 'glass-card-purple hover:border-glow-purple/60 hover:shadow-glow-purple';
       case 'orange':
         return 'glass-card-orange hover:border-glow-orange/60 hover:shadow-glow-orange';
+      case 'green':
+        return 'glass-card-green hover:border-glow-green/60 hover:shadow-glow-green';
       default:
         return 'glass-card hover:border-glow-cyan/60';
     }
@@ -37,6 +39,8 @@ const ScientistCard = ({ scientist, index }: ScientistCardProps) => {
         return 'text-glow-purple';
       case 'orange':
         return 'text-glow-orange';
+      case 'green':
+        return 'text-glow-green';
       default:
         return 'text-glow-cyan';
     }
@@ -50,6 +54,8 @@ const ScientistCard = ({ scientist, index }: ScientistCardProps) => {
         return 'text-glow-purple';
       case 'orange':
         return 'text-glow-orange';
+      case 'green':
+        return 'text-glow-green';
       default:
         return 'text-glow-cyan';
     }
@@ -63,6 +69,8 @@ const ScientistCard = ({ scientist, index }: ScientistCardProps) => {
         return 'from-purple-500/20 to-pink-600/20 border-purple-500/40';
       case 'orange':
         return 'from-orange-500/20 to-amber-600/20 border-orange-500/40';
+      case 'green':
+        return 'from-green-500/20 to-emerald-600/20 border-green-500/40';
       default:
         return 'from-cyan-500/20 to-blue-600/20 border-cyan-500/40';
     }
@@ -104,8 +112,25 @@ const ScientistCard = ({ scientist, index }: ScientistCardProps) => {
       )}
 
       {!isUnlocked && (
-        <div className="absolute inset-0 flex items-center justify-center z-10 bg-quantum-900/80 backdrop-blur-sm rounded-2xl">
-          <Lock className="w-10 h-10 text-gray-500" />
+        <div className="absolute inset-0 flex items-center justify-center z-10 bg-quantum-900/85 backdrop-blur-sm rounded-2xl">
+          <div className="text-center p-4">
+            <Lock className="w-10 h-10 text-glow-green/70 mx-auto mb-2" />
+            <span className="text-xs text-glow-green/80 font-medium">干涉条纹解锁</span>
+          </div>
+        </div>
+      )}
+
+      {scientist.isSpecial && isUnlocked && (
+        <div className="absolute -top-3 -left-3 z-10">
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: [0, 1.1, 1] }}
+            transition={{ delay: index * 0.15 + 0.4, type: 'spring' }}
+            className="px-3 py-1 rounded-full bg-glow-green/20 border-2 border-glow-green/50 flex items-center gap-1"
+            style={{ boxShadow: '0 0 15px rgba(57, 255, 20, 0.4)' }}
+          >
+            <span className="text-[10px] font-bold text-glow-green">⚡ 特殊</span>
+          </motion.div>
         </div>
       )}
 

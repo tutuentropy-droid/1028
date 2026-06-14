@@ -6,7 +6,7 @@ import type { Recording } from '@/types';
 interface RecordingPlayerProps {
   recording: Recording;
   isUnlocked: boolean;
-  accentColor?: 'cyan' | 'purple' | 'orange';
+  accentColor?: 'cyan' | 'purple' | 'orange' | 'green';
 }
 
 const RecordingPlayer = ({ recording, isUnlocked, accentColor = 'cyan' }: RecordingPlayerProps) => {
@@ -24,6 +24,8 @@ const RecordingPlayer = ({ recording, isUnlocked, accentColor = 'cyan' }: Record
         return 'text-glow-purple';
       case 'orange':
         return 'text-glow-orange';
+      case 'green':
+        return 'text-glow-green';
       default:
         return 'text-glow-cyan';
     }
@@ -37,8 +39,25 @@ const RecordingPlayer = ({ recording, isUnlocked, accentColor = 'cyan' }: Record
         return 'border-glow-purple/40 hover:border-glow-purple/70';
       case 'orange':
         return 'border-glow-orange/40 hover:border-glow-orange/70';
+      case 'green':
+        return 'border-glow-green/40 hover:border-glow-green/70';
       default:
         return 'border-glow-cyan/40 hover:border-glow-cyan/70';
+    }
+  };
+
+  const getBgClass = () => {
+    switch (accentColor) {
+      case 'cyan':
+        return 'bg-glow-cyan';
+      case 'purple':
+        return 'bg-glow-purple';
+      case 'orange':
+        return 'bg-glow-orange';
+      case 'green':
+        return 'bg-glow-green';
+      default:
+        return 'bg-glow-cyan';
     }
   };
 
@@ -196,7 +215,7 @@ const RecordingPlayer = ({ recording, isUnlocked, accentColor = 'cyan' }: Record
                 key={i}
                 className={`w-1 rounded-full transition-all duration-150 ${
                   isPlaying && (progress / 100) * 20 > i
-                    ? accentColor === 'cyan' ? 'bg-glow-cyan' : accentColor === 'purple' ? 'bg-glow-purple' : 'bg-glow-orange'
+                    ? getBgClass()
                     : 'bg-indigo-700/50'
                 }`}
                 style={{
@@ -210,9 +229,7 @@ const RecordingPlayer = ({ recording, isUnlocked, accentColor = 'cyan' }: Record
               initial={{ width: '0%' }}
               animate={{ width: `${progress}%` }}
               transition={{ duration: 0.1 }}
-              className={`h-full ${
-                accentColor === 'cyan' ? 'bg-glow-cyan' : accentColor === 'purple' ? 'bg-glow-purple' : 'bg-glow-orange'
-              } rounded-full`}
+              className={`h-full ${getBgClass()} rounded-full`}
             />
           </div>
         </div>

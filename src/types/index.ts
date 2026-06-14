@@ -1,4 +1,4 @@
-export type PuzzleType = 'drag-number' | 'photon-match' | 'drag-orbit' | 'schrodinger-quiz' | 'entanglement-match';
+export type PuzzleType = 'drag-number' | 'photon-match' | 'drag-orbit' | 'schrodinger-quiz' | 'entanglement-match' | 'heisenberg-quiz';
 
 export interface PuzzleTarget {
   id: string;
@@ -56,9 +56,35 @@ export interface Scientist {
   nameEn: string;
   years: string;
   contribution: string;
-  accentColor: 'cyan' | 'purple' | 'orange';
+  accentColor: 'cyan' | 'purple' | 'orange' | 'green';
   concept: ScientistConcept;
   puzzle: Puzzle;
   recording: Recording;
   anecdotes?: ScientistAnecdote[];
+  isSpecial?: boolean;
+}
+
+export interface PhotonHit {
+  x: number;
+  y: number;
+  intensity: number;
+  scientistId: string;
+  timestamp: number;
+}
+
+export interface ScienceInterference {
+  id: string;
+  scientistIds: [string, string];
+  title: string;
+  explanation: string;
+  year?: string;
+}
+
+export interface InterferenceState {
+  photonHits: PhotonHit[];
+  fringeContrast: number;
+  consecutiveCorrectScientists: string[];
+  unlockedInterferences: string[];
+  specialLevelUnlocked: boolean;
+  totalPhotons: number;
 }
