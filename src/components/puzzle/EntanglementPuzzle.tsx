@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, X, Star, Link2, RefreshCw, Users, User, Keyboard } from 'lucide-react';
+import { Sparkles, X, Star, Link2, RefreshCw, Users, User, Keyboard, Eye, Zap } from 'lucide-react';
 import type { Puzzle, ScientistAnecdote } from '@/types';
 
 interface EntanglementPuzzleProps {
@@ -47,6 +47,17 @@ const EntanglementPuzzle = ({ puzzle, anecdotes = [], onCorrect, onIncorrect, on
   const containerRef = useRef<HTMLDivElement | null>(null);
   const animFrameRef = useRef<number | null>(null);
   const [, forceUpdate] = useState(0);
+
+  const [positionUncertainty, setPositionUncertainty] = useState(30);
+  const [momentumUncertainty, setMomentumUncertainty] = useState(30);
+  const [observerUsesRemaining, setObserverUsesRemaining] = useState(3);
+  const [isObserving, setIsObserving] = useState(false);
+
+  const lastMousePosRef = useRef<{ x: number; y: number } | null>(null);
+  const lastMoveTimeRef = useRef<number>(Date.now());
+  const hesitationStartRef = useRef<number>(Date.now());
+  const uncertaintyAnimFrameRef = useRef<number | null>(null);
+  const mouseMoveAccumulatorRef = useRef(0);
 
   const correctPairs = useMemo(() => {
     const pairs = new Map<string, string>();
@@ -230,6 +241,7 @@ const EntanglementPuzzle = ({ puzzle, anecdotes = [], onCorrect, onIncorrect, on
       if (!canSelectLeft()) return;
       if (matchedPairs.has(id)) return;
 
+      hesitationStartRef.current = Date.now();
       setSelectedLeft(id);
 
       if (gameMode === 'solo' && selectedRight) {
@@ -248,6 +260,7 @@ const EntanglementPuzzle = ({ puzzle, anecdotes = [], onCorrect, onIncorrect, on
       const isRightMatched = Array.from(matchedPairs.values()).includes(id);
       if (isRightMatched) return;
 
+      hesitationStartRef.current = Date.now();
       setSelectedRight(id);
 
       if (gameMode === 'solo' && selectedLeft) {
@@ -299,6 +312,109 @@ const EntanglementPuzzle = ({ puzzle, anecdotes = [], onCorrect, onIncorrect, on
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [gameMode, currentTurn, leftItems, rightItems, matchedPairs, showAnecdote, disabled, allMatched, wrongPair, handleLeftClick, handleRightClick]);
 
+  const totalUncertainty = useMemo(() => {
+    return Math.min(100, (positionUncertainty + momentumUncertainty) / 2);
+  }, [positionUncertainty, momentumUncertainty]);
+
+  const blurAmount = useMemo(() => {
+    if (isObserving) return 0;
+    return (totalUncertainty / 100) * 4;
+  }, [totalUncertainty, isObserving]);
+
+  const shakeAmount = useMemo(() => {
+    if (isObserving) return 0;
+    return (totalUncertainty / 100) * 3;
+  }, [totalUncertainty, isObserving]);
+
+  const handleObserve = useCallback(() => {
+    if (observerUsesRemaining <= 0 || isObserving) return;
+    setObserverUsesRemaining((prev) => prev - 1);
+    setIsObserving(true);
+    setPositionUncertainty(5);
+    setMomentumUncertainty(5);
+    setTimeout(() => {
+      setIsObserving(false);
+      setPositionUncertainty(25);
+      setMomentumUncertainty(45);
+    }, 2000);
+  }, [observerUsesRemaining, isObserving]);
+
+  useEffect(() => {
+    if (disabled || allMatched) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const now = Date.now();
+      const lastPos = lastMousePosRef.current;
+
+      if (lastPos) {
+        const dx = e.clientX - lastPos.x;
+        const dy = e.clientY - lastPos.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        mouseMoveAccumulatorRef.current += distance;
+      }
+
+      lastMousePosRef.current = { x: e.clientX, y: e.clientY };
+      lastMoveTimeRef.current = now;
+      hesitationStartRef.current = now;
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, [disabled, allMatched]);
+
+  useEffect(() => {
+    if (disabled || allMatched || isObserving) {
+      if (uncertaintyAnimFrameRef.current) {
+        cancelAnimationFrame(uncertaintyAnimFrameRef.current);
+        uncertaintyAnimFrameRef.current = null;
+      }
+      return;
+    }
+
+    let lastTime = performance.now();
+
+    const updateUncertainty = (currentTime: number) => {
+      const deltaTime = (currentTime - lastTime) / 1000;
+      lastTime = currentTime;
+
+      const now = Date.now();
+      const hesitationDuration = now - hesitationStartRef.current;
+      const timeSinceLastMove = now - lastMoveTimeRef.current;
+
+      const moveAccumulation = mouseMoveAccumulatorRef.current;
+      mouseMoveAccumulatorRef.current *= Math.pow(0.95, deltaTime * 60);
+
+      setPositionUncertainty((prev) => {
+        let next = prev;
+        const moveEffect = Math.min(moveAccumulation * 0.015, 2);
+        next -= moveEffect * deltaTime * 60;
+        next += deltaTime * 2;
+        return Math.max(5, Math.min(95, next));
+      });
+
+      setMomentumUncertainty((prev) => {
+        let next = prev;
+        const hesitationEffect = Math.min(hesitationDuration / 3000, 1);
+        const target = 30 + hesitationEffect * 60;
+        const diff = target - prev;
+        next += diff * deltaTime * 2;
+        const movePenalty = Math.min(moveAccumulation * 0.008, 1.5);
+        next += movePenalty * deltaTime * 60;
+        return Math.max(5, Math.min(95, next));
+      });
+
+      uncertaintyAnimFrameRef.current = requestAnimationFrame(updateUncertainty);
+    };
+
+    uncertaintyAnimFrameRef.current = requestAnimationFrame(updateUncertainty);
+
+    return () => {
+      if (uncertaintyAnimFrameRef.current) {
+        cancelAnimationFrame(uncertaintyAnimFrameRef.current);
+      }
+    };
+  }, [disabled, allMatched, isObserving]);
+
   const handleReset = useCallback(() => {
     hasCalledOnCorrectRef.current = false;
     setRoundKey((k) => k + 1);
@@ -313,6 +429,13 @@ const EntanglementPuzzle = ({ puzzle, anecdotes = [], onCorrect, onIncorrect, on
     setShowAnecdote(null);
     setAllMatched(false);
     setCurrentTurn('P1');
+    setPositionUncertainty(30);
+    setMomentumUncertainty(30);
+    setObserverUsesRemaining(3);
+    setIsObserving(false);
+    hesitationStartRef.current = Date.now();
+    lastMoveTimeRef.current = Date.now();
+    mouseMoveAccumulatorRef.current = 0;
     if (onReset) {
       onReset();
     }
@@ -705,11 +828,26 @@ const EntanglementPuzzle = ({ puzzle, anecdotes = [], onCorrect, onIncorrect, on
                           : undefined,
                       }}
                     />
-                    <div>
+                    <motion.div
+                      animate={isMatched || isObserving ? {
+                        filter: 'blur(0px)',
+                        x: 0,
+                        y: 0,
+                      } : {
+                        filter: [`blur(${blurAmount * 0.8}px)`, `blur(${blurAmount * 1.2}px)`, `blur(${blurAmount * 0.8}px)`],
+                        x: [-shakeAmount * 0.5, shakeAmount * 0.5, -shakeAmount * 0.5],
+                        y: [shakeAmount * 0.3, -shakeAmount * 0.3, shakeAmount * 0.3],
+                      }}
+                      transition={{
+                        duration: 0.3,
+                        repeat: Infinity,
+                        ease: 'easeInOut',
+                      }}
+                    >
                       <p className="font-medium text-white text-sm">
                         {target.label}
                       </p>
-                    </div>
+                    </motion.div>
                   </div>
                   {isMatched && (
                     <motion.div
@@ -807,7 +945,22 @@ const EntanglementPuzzle = ({ puzzle, anecdotes = [], onCorrect, onIncorrect, on
                     </div>
                   )}
                   <div className="flex items-start justify-end gap-3">
-                    <div>
+                    <motion.div
+                      animate={isMatched || isObserving ? {
+                        filter: 'blur(0px)',
+                        x: 0,
+                        y: 0,
+                      } : {
+                        filter: [`blur(${blurAmount * 0.8}px)`, `blur(${blurAmount * 1.2}px)`, `blur(${blurAmount * 0.8}px)`],
+                        x: [shakeAmount * 0.5, -shakeAmount * 0.5, shakeAmount * 0.5],
+                        y: [-shakeAmount * 0.3, shakeAmount * 0.3, -shakeAmount * 0.3],
+                      }}
+                      transition={{
+                        duration: 0.3,
+                        repeat: Infinity,
+                        ease: 'easeInOut',
+                      }}
+                    >
                       <p className="font-medium text-white text-sm">
                         {option.label}
                       </p>
@@ -816,7 +969,7 @@ const EntanglementPuzzle = ({ puzzle, anecdotes = [], onCorrect, onIncorrect, on
                           {option.value}
                         </p>
                       )}
-                    </div>
+                    </motion.div>
                     <div
                       className={`
                       w-2 h-2 rounded-full mt-1.5 flex-shrink-0
@@ -895,6 +1048,98 @@ const EntanglementPuzzle = ({ puzzle, anecdotes = [], onCorrect, onIncorrect, on
               : entanglementStrength >= 50
               ? '⚡ 纠缠稳定，继续保持！'
               : '💫 纠缠较弱，再试几次吧'}
+          </p>
+        </div>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.9 }}
+        className="mt-4"
+      >
+        <div className="glass-card p-4">
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-sm text-indigo-300/80 flex items-center gap-2">
+              <Zap className="w-4 h-4 text-glow-cyan" />
+              海森堡不确定度
+            </span>
+            <button
+              onClick={handleObserve}
+              disabled={observerUsesRemaining <= 0 || isObserving || allMatched}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                observerUsesRemaining > 0 && !isObserving && !allMatched
+                  ? 'bg-glow-cyan/20 text-glow-cyan border border-glow-cyan/50 hover:bg-glow-cyan/30 cursor-pointer'
+                  : 'bg-quantum-800 text-indigo-500 border border-indigo-700/30 cursor-not-allowed'
+              }`}
+            >
+              <Eye className="w-3.5 h-3.5" />
+              <span>观测 ({observerUsesRemaining})</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <div className="flex justify-between text-xs">
+                <span className="text-indigo-400">位置不确定度</span>
+                <span className="text-glow-purple font-mono font-bold">
+                  {Math.round(positionUncertainty)}%
+                </span>
+              </div>
+              <div className="h-20 w-full bg-quantum-800 rounded-lg overflow-hidden relative">
+                <motion.div
+                  className="absolute bottom-0 left-0 right-0 rounded-t-lg"
+                  initial={{ height: 0 }}
+                  animate={{ height: `${positionUncertainty}%` }}
+                  transition={{ duration: 0.3, ease: 'easeOut' }}
+                  style={{
+                    background: 'linear-gradient(to top, #9d4edd, #c77dff)',
+                    boxShadow: '0 0 10px rgba(157, 78, 221, 0.5)',
+                  }}
+                />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-[10px] text-white/60 font-mono">
+                    Δx
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex justify-between text-xs">
+                <span className="text-indigo-400">动量不确定度</span>
+                <span className="text-glow-cyan font-mono font-bold">
+                  {Math.round(momentumUncertainty)}%
+                </span>
+              </div>
+              <div className="h-20 w-full bg-quantum-800 rounded-lg overflow-hidden relative">
+                <motion.div
+                  className="absolute bottom-0 left-0 right-0 rounded-t-lg"
+                  initial={{ height: 0 }}
+                  animate={{ height: `${momentumUncertainty}%` }}
+                  transition={{ duration: 0.3, ease: 'easeOut' }}
+                  style={{
+                    background: 'linear-gradient(to top, #00d4ff, #72efdd)',
+                    boxShadow: '0 0 10px rgba(0, 212, 255, 0.5)',
+                  }}
+                />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-[10px] text-white/60 font-mono">
+                    Δp
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <p className="text-xs text-indigo-400/60 mt-3 text-center">
+            {isObserving
+              ? '🔍 观测中... 波函数坍缩，答案清晰可见'
+              : totalUncertainty >= 70
+              ? '⚠️ 高度不确定！移动鼠标降低位置不确定度，快速决策降低动量不确定度'
+              : totalUncertainty >= 40
+              ? '⚡ 中等不确定度，保持专注'
+              : '✨ 状态稳定，不确定度较低'}
           </p>
         </div>
       </motion.div>
