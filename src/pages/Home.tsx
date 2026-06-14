@@ -42,7 +42,7 @@ const Home = () => {
             transition={{ duration: 0.8, delay: 0.3 }}
             className="text-lg text-indigo-300/80 max-w-2xl mx-auto leading-relaxed"
           >
-            穿越时空，与三位量子力学巨人对话。解开量子谜题，聆听历史回响，
+            穿越时空，与量子力学巨人们对话。解开量子谜题，聆听历史回响，
             探索那个改写物理学的黄金年代。
           </motion.p>
 
@@ -71,7 +71,7 @@ const Home = () => {
           </motion.div>
         </motion.div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-7xl mx-auto">
           {scientists.map((scientist, index) => (
             <ScientistCard
               key={scientist.id}

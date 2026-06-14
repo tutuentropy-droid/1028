@@ -8,6 +8,11 @@ interface GameState {
   unlockedRecordings: string[];
   currentScientist: string | null;
   
+  superpositionTotalGuesses: number;
+  superpositionCorrectGuesses: number;
+  superpositionConsecutiveCorrect: number;
+  catEmojiRewardActive: boolean;
+
   incrementLevel: () => void;
   decrementLevel: () => void;
   resetLevel: () => void;
@@ -16,6 +21,9 @@ interface GameState {
   setCurrentScientist: (id: string | null) => void;
   isPuzzleCompleted: (puzzleId: string) => boolean;
   isRecordingUnlocked: (recordingId: string) => boolean;
+  recordSuperpositionGuess: (isCorrect: boolean) => void;
+  activateCatEmojiReward: () => void;
+  consumeCatEmojiReward: () => void;
   resetAll: () => void;
 }
 
@@ -30,6 +38,10 @@ export const useGameStore = create<GameState>()(
       completedPuzzles: [],
       unlockedRecordings: [],
       currentScientist: null,
+      superpositionTotalGuesses: 0,
+      superpositionCorrectGuesses: 0,
+      superpositionConsecutiveCorrect: 0,
+      catEmojiRewardActive: false,
 
       incrementLevel: () =>
         set((state) => {
@@ -75,6 +87,30 @@ export const useGameStore = create<GameState>()(
       isRecordingUnlocked: (recordingId: string) =>
         get().unlockedRecordings.includes(recordingId),
 
+      recordSuperpositionGuess: (isCorrect: boolean) =>
+        set((state) => {
+          const newConsecutive = isCorrect
+            ? state.superpositionConsecutiveCorrect + 1
+            : 0;
+          const shouldActivateReward = newConsecutive >= 3 && !state.catEmojiRewardActive;
+          return {
+            superpositionTotalGuesses: state.superpositionTotalGuesses + 1,
+            superpositionCorrectGuesses: state.superpositionCorrectGuesses + (isCorrect ? 1 : 0),
+            superpositionConsecutiveCorrect: shouldActivateReward ? 0 : newConsecutive,
+            catEmojiRewardActive: shouldActivateReward || state.catEmojiRewardActive,
+          };
+        }),
+
+      activateCatEmojiReward: () =>
+        set(() => ({
+          catEmojiRewardActive: true,
+        })),
+
+      consumeCatEmojiReward: () =>
+        set(() => ({
+          catEmojiRewardActive: false,
+        })),
+
       resetAll: () =>
         set(() => ({
           energyLevel: INITIAL_LEVEL,
@@ -82,6 +118,10 @@ export const useGameStore = create<GameState>()(
           completedPuzzles: [],
           unlockedRecordings: [],
           currentScientist: null,
+          superpositionTotalGuesses: 0,
+          superpositionCorrectGuesses: 0,
+          superpositionConsecutiveCorrect: 0,
+          catEmojiRewardActive: false,
         })),
     }),
     {

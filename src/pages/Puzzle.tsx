@@ -8,6 +8,7 @@ import ConceptIntro from '@/components/puzzle/ConceptIntro';
 import DragNumberPuzzle from '@/components/puzzle/DragNumberPuzzle';
 import PhotonMatchPuzzle from '@/components/puzzle/PhotonMatchPuzzle';
 import OrbitPuzzle from '@/components/puzzle/OrbitPuzzle';
+import SchrodingerPuzzle from '@/components/puzzle/SchrodingerPuzzle';
 import RecordingPlayer from '@/components/puzzle/RecordingPlayer';
 import FeedbackOverlay from '@/components/puzzle/FeedbackOverlay';
 
@@ -118,6 +119,16 @@ const Puzzle = () => {
       case 'drag-orbit':
         return (
           <OrbitPuzzle
+            key={puzzleKey}
+            puzzle={scientist.puzzle}
+            onCorrect={handleCorrect}
+            onIncorrect={handleIncorrect}
+            disabled={disabled}
+          />
+        );
+      case 'schrodinger-quiz':
+        return (
+          <SchrodingerPuzzle
             key={puzzleKey}
             puzzle={scientist.puzzle}
             onCorrect={handleCorrect}

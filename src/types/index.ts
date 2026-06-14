@@ -1,4 +1,4 @@
-export type PuzzleType = 'drag-number' | 'photon-match' | 'drag-orbit';
+export type PuzzleType = 'drag-number' | 'photon-match' | 'drag-orbit' | 'schrodinger-quiz';
 
 export interface PuzzleTarget {
   id: string;
@@ -18,6 +18,9 @@ export interface Puzzle {
   instruction: string;
   targets: PuzzleTarget[];
   options: PuzzleOption[];
+  question?: string;
+  correctAnswerId?: string;
+  distractors?: PuzzleOption[];
 }
 
 export interface Recording {
