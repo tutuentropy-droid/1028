@@ -59,8 +59,18 @@ const Puzzle = () => {
   const handleIncorrect = useCallback(() => {
     if (!scientist || hasAnswered) return;
 
+    const isEntanglementPuzzle = scientist.puzzle.type === 'entanglement-match';
+
+    if (isEntanglementPuzzle) {
+      setFeedbackType('incorrect');
+      setTimeout(() => {
+        setFeedbackType(null);
+      }, 1000);
+      return;
+    }
+
     const newLevel = energyLevel - 1;
-    
+
     if (newLevel <= 0) {
       resetLevel();
       setFeedbackType('incorrect');
@@ -81,6 +91,11 @@ const Puzzle = () => {
     setHasAnswered(false);
   };
 
+  const handleEntanglementReset = useCallback(() => {
+    setHasAnswered(false);
+    setPuzzleKey((k) => k + 1);
+  }, []);
+
   const handleBack = () => {
     navigate('/');
   };
@@ -94,7 +109,8 @@ const Puzzle = () => {
   }
 
   const renderPuzzle = () => {
-    const disabled = isCompleted && hasAnswered;
+    const isEntanglementPuzzle = scientist.puzzle.type === 'entanglement-match';
+    const disabled = isCompleted && hasAnswered && !isEntanglementPuzzle;
 
     switch (scientist.puzzle.type) {
       case 'drag-number':
@@ -145,6 +161,7 @@ const Puzzle = () => {
             anecdotes={scientist.anecdotes}
             onCorrect={handleCorrect}
             onIncorrect={handleIncorrect}
+            onReset={handleEntanglementReset}
             disabled={disabled}
           />
         );

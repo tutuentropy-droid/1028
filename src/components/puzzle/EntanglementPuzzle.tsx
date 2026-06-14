@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, X, Star, Link2, RefreshCw } from 'lucide-react';
+import { Sparkles, X, Star, Link2, RefreshCw, Users, User, Keyboard } from 'lucide-react';
 import type { Puzzle, ScientistAnecdote } from '@/types';
 
 interface EntanglementPuzzleProps {
@@ -8,6 +8,7 @@ interface EntanglementPuzzleProps {
   anecdotes?: ScientistAnecdote[];
   onCorrect: () => void;
   onIncorrect: () => void;
+  onReset?: () => void;
   disabled?: boolean;
 }
 
@@ -18,7 +19,16 @@ interface ParticleLine {
   status: 'connecting' | 'connected' | 'breaking' | 'broken';
 }
 
-const EntanglementPuzzle = ({ puzzle, anecdotes = [], onCorrect, onIncorrect, disabled }: EntanglementPuzzleProps) => {
+type GameMode = 'solo' | 'duo';
+type PlayerTurn = 'P1' | 'P2';
+
+const P1_KEYS = ['1', '2', '3', '4', '5', '6'];
+const P2_KEYS = ['u', 'i', 'o', 'j', 'k', 'l'];
+
+const EntanglementPuzzle = ({ puzzle, anecdotes = [], onCorrect, onIncorrect, onReset, disabled }: EntanglementPuzzleProps) => {
+  const [gameMode, setGameMode] = useState<GameMode>('solo');
+  const [currentTurn, setCurrentTurn] = useState<PlayerTurn>('P1');
+
   const [selectedLeft, setSelectedLeft] = useState<string | null>(null);
   const [selectedRight, setSelectedRight] = useState<string | null>(null);
   const [matchedPairs, setMatchedPairs] = useState<Map<string, string>>(new Map());
@@ -46,6 +56,8 @@ const EntanglementPuzzle = ({ puzzle, anecdotes = [], onCorrect, onIncorrect, di
     return pairs;
   }, [puzzle.targets]);
 
+  const leftItems = useMemo(() => puzzle.targets, [puzzle.targets]);
+  const rightItems = useMemo(() => puzzle.options, [puzzle.options]);
   const totalPairs = puzzle.targets.length;
 
   const entanglementStrength = useMemo(() => {
@@ -116,40 +128,23 @@ const EntanglementPuzzle = ({ puzzle, anecdotes = [], onCorrect, onIncorrect, di
     [correctPairs]
   );
 
-  const handleLeftClick = useCallback(
-    (id: string) => {
-      if (disabled || allMatched) return;
-      if (matchedPairs.has(id)) return;
-      if (wrongPair) return;
+  const canSelectLeft = useCallback(() => {
+    if (disabled || allMatched || wrongPair) return false;
+    if (gameMode === 'solo') return true;
+    return currentTurn === 'P1';
+  }, [disabled, allMatched, wrongPair, gameMode, currentTurn]);
 
-      setSelectedLeft(id);
+  const canSelectRight = useCallback(() => {
+    if (disabled || allMatched || wrongPair) return false;
+    if (gameMode === 'solo') return true;
+    return currentTurn === 'P2';
+  }, [disabled, allMatched, wrongPair, gameMode, currentTurn]);
 
-      if (selectedRight) {
-        const isCorrect = checkMatch(id, selectedRight);
-        handleMatchResult(id, selectedRight, isCorrect);
-      }
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [disabled, allMatched, matchedPairs, wrongPair, selectedRight, checkMatch]
-  );
-
-  const handleRightClick = useCallback(
-    (id: string) => {
-      if (disabled || allMatched) return;
-      const isRightMatched = Array.from(matchedPairs.values()).includes(id);
-      if (isRightMatched) return;
-      if (wrongPair) return;
-
-      setSelectedRight(id);
-
-      if (selectedLeft) {
-        const isCorrect = checkMatch(selectedLeft, id);
-        handleMatchResult(selectedLeft, id, isCorrect);
-      }
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [disabled, allMatched, matchedPairs, wrongPair, selectedLeft, checkMatch]
-  );
+  const switchTurn = useCallback(() => {
+    if (gameMode === 'duo') {
+      setCurrentTurn((t) => (t === 'P1' ? 'P2' : 'P1'));
+    }
+  }, [gameMode]);
 
   const handleMatchResult = useCallback(
     (leftId: string, rightId: string, isCorrect: boolean) => {
@@ -223,11 +218,86 @@ const EntanglementPuzzle = ({ puzzle, anecdotes = [], onCorrect, onIncorrect, di
           setSelectedRight(null);
           setWrongCount((c) => c + 1);
           onIncorrect();
+          switchTurn();
         }, 1000);
       }
     },
-    [correctCount, totalPairs, anecdotes, onCorrect, onIncorrect]
+    [correctCount, totalPairs, anecdotes, onCorrect, onIncorrect, switchTurn]
   );
+
+  const handleLeftClick = useCallback(
+    (id: string) => {
+      if (!canSelectLeft()) return;
+      if (matchedPairs.has(id)) return;
+
+      setSelectedLeft(id);
+
+      if (gameMode === 'solo' && selectedRight) {
+        const isCorrect = checkMatch(id, selectedRight);
+        handleMatchResult(id, selectedRight, isCorrect);
+      } else if (gameMode === 'duo') {
+        switchTurn();
+      }
+    },
+    [canSelectLeft, matchedPairs, gameMode, selectedRight, checkMatch, handleMatchResult, switchTurn]
+  );
+
+  const handleRightClick = useCallback(
+    (id: string) => {
+      if (!canSelectRight()) return;
+      const isRightMatched = Array.from(matchedPairs.values()).includes(id);
+      if (isRightMatched) return;
+
+      setSelectedRight(id);
+
+      if (gameMode === 'solo' && selectedLeft) {
+        const isCorrect = checkMatch(selectedLeft, id);
+        handleMatchResult(selectedLeft, id, isCorrect);
+      } else if (gameMode === 'duo') {
+        if (selectedLeft) {
+          const isCorrect = checkMatch(selectedLeft, id);
+          handleMatchResult(selectedLeft, id, isCorrect);
+        } else {
+          switchTurn();
+        }
+      }
+    },
+    [canSelectRight, matchedPairs, gameMode, selectedLeft, checkMatch, handleMatchResult, switchTurn]
+  );
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat) return;
+      if (showAnecdote) return;
+      if (disabled || allMatched || wrongPair) return;
+
+      const key = e.key.toLowerCase();
+
+      if (gameMode === 'solo' || currentTurn === 'P1') {
+        const p1Idx = P1_KEYS.indexOf(key);
+        if (p1Idx !== -1 && p1Idx < leftItems.length) {
+          const target = leftItems[p1Idx];
+          if (!matchedPairs.has(target.id)) {
+            handleLeftClick(target.id);
+          }
+        }
+      }
+
+      if (gameMode === 'solo' || currentTurn === 'P2') {
+        const p2Idx = P2_KEYS.indexOf(key);
+        if (p2Idx !== -1 && p2Idx < rightItems.length) {
+          const option = rightItems[p2Idx];
+          const isRightMatched = Array.from(matchedPairs.values()).includes(option.id);
+          if (!isRightMatched) {
+            handleRightClick(option.id);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [gameMode, currentTurn, leftItems, rightItems, matchedPairs, showAnecdote, disabled, allMatched, wrongPair, handleLeftClick, handleRightClick]);
 
   const handleReset = useCallback(() => {
     hasCalledOnCorrectRef.current = false;
@@ -242,7 +312,11 @@ const EntanglementPuzzle = ({ puzzle, anecdotes = [], onCorrect, onIncorrect, di
     setUnlockedAnecdotes([]);
     setShowAnecdote(null);
     setAllMatched(false);
-  }, []);
+    setCurrentTurn('P1');
+    if (onReset) {
+      onReset();
+    }
+  }, [onReset]);
 
   const closeAnecdote = useCallback(() => {
     setShowAnecdote(null);
@@ -402,13 +476,23 @@ const EntanglementPuzzle = ({ puzzle, anecdotes = [], onCorrect, onIncorrect, di
   const isRightMatched = (id: string) =>
     Array.from(matchedPairs.values()).includes(id);
 
+  const p1KeyLabel = (idx: number) => P1_KEYS[idx]?.toUpperCase() || '';
+  const p2KeyLabel = (idx: number) => P2_KEYS[idx]?.toUpperCase() || '';
+
+  const turnIndicatorClass = () => {
+    if (gameMode === 'solo') return 'bg-glow-cyan/20 border-glow-cyan/40 text-glow-cyan';
+    return currentTurn === 'P1'
+      ? 'bg-glow-purple/20 border-glow-purple/40 text-glow-purple'
+      : 'bg-glow-orange/20 border-glow-orange/40 text-glow-orange';
+  };
+
   return (
     <div key={roundKey} className="space-y-6">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className="text-center mb-4"
+        transition={{ delay: 0.15 }}
+        className="text-center mb-2"
       >
         <h3 className="text-2xl font-bold font-serif text-white mb-2">
           {puzzle.title}
@@ -419,9 +503,52 @@ const EntanglementPuzzle = ({ puzzle, anecdotes = [], onCorrect, onIncorrect, di
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
+        transition={{ delay: 0.2 }}
         className="flex flex-wrap justify-center gap-3 mb-2 text-sm"
       >
+        <div className="glass-card px-4 py-2 flex items-center gap-2">
+          <button
+            onClick={() => setGameMode('solo')}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs transition-all ${
+              gameMode === 'solo'
+                ? 'bg-glow-cyan/20 text-glow-cyan border border-glow-cyan/40'
+                : 'text-indigo-400 hover:text-indigo-300'
+            }`}
+          >
+            <User className="w-3.5 h-3.5" />
+            <span>单人</span>
+          </button>
+          <button
+            onClick={() => {
+              setGameMode('duo');
+              setCurrentTurn('P1');
+              setSelectedLeft(null);
+              setSelectedRight(null);
+            }}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs transition-all ${
+              gameMode === 'duo'
+                ? 'bg-glow-purple/20 text-glow-purple border border-glow-purple/40'
+                : 'text-indigo-400 hover:text-indigo-300'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>双人</span>
+          </button>
+        </div>
+
+        {gameMode === 'duo' && (
+          <motion.div
+            key={currentTurn}
+            initial={{ scale: 0.95 }}
+            animate={{ scale: 1 }}
+            className={`glass-card px-4 py-2 flex items-center gap-2 border rounded-lg ${turnIndicatorClass()}`}
+          >
+            <span className="text-xs font-bold">
+              当前回合：{currentTurn === 'P1' ? '玩家一 (左侧历史)' : '玩家二 (右侧概念)'}
+            </span>
+          </motion.div>
+        )}
+
         <div className="glass-card px-4 py-2 flex items-center gap-2">
           <Link2 className="w-4 h-4 text-glow-purple" />
           <span className="text-indigo-300">已配对：</span>
@@ -452,6 +579,24 @@ const EntanglementPuzzle = ({ puzzle, anecdotes = [], onCorrect, onIncorrect, di
         )}
       </motion.div>
 
+      {gameMode === 'duo' && (
+        <motion.div
+          initial={{ opacity: 0, y: 5 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25 }}
+          className="grid grid-cols-2 gap-4 text-xs"
+        >
+          <div className="glass-card-purple px-3 py-2 flex items-center gap-2 justify-center">
+            <Keyboard className="w-3.5 h-3.5 text-glow-purple" />
+            <span className="text-glow-purple">玩家一：按键 1 2 3 4 5 6</span>
+          </div>
+          <div className="glass-card-orange px-3 py-2 flex items-center gap-2 justify-center">
+            <Keyboard className="w-3.5 h-3.5 text-glow-orange" />
+            <span className="text-glow-orange">玩家二：按键 U I O J K L</span>
+          </div>
+        </motion.div>
+      )}
+
       <div ref={containerRef} className="relative">
         <svg
           className="absolute inset-0 w-full h-full pointer-events-none z-10"
@@ -464,18 +609,31 @@ const EntanglementPuzzle = ({ puzzle, anecdotes = [], onCorrect, onIncorrect, di
           <motion.div
             initial={{ opacity: 0, x: -30 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.4 }}
-            className="space-y-2.5"
+            transition={{ delay: 0.3 }}
+            className={`space-y-2.5 ${
+              gameMode === 'duo' && currentTurn === 'P1'
+                ? 'ring-2 ring-glow-purple/40 rounded-2xl p-1 -m-1 transition-all'
+                : ''
+            }`}
           >
             <div className="text-center mb-3">
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-glow-purple/10 border border-glow-purple/30">
-                <span className="text-xs font-medium text-glow-purple">历史事件</span>
+              <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full border ${
+                gameMode === 'duo' && currentTurn === 'P1'
+                  ? 'bg-glow-purple/20 border-glow-purple/50'
+                  : 'bg-glow-purple/10 border-glow-purple/30'
+              }`}>
+                <span className={`text-xs font-medium ${
+                  gameMode === 'duo' && currentTurn === 'P1' ? 'text-glow-purple font-bold' : 'text-glow-purple'
+                }`}>
+                  {gameMode === 'duo' ? '玩家一 · ' : ''}历史事件
+                </span>
               </div>
             </div>
-            {puzzle.targets.map((target, index) => {
+            {leftItems.map((target, index) => {
               const isSelected = selectedLeft === target.id;
               const isMatched = isLeftMatched(target.id);
               const isWrong = wrongPair?.left === target.id;
+              const canClick = canSelectLeft() && !isMatched;
 
               return (
                 <motion.div
@@ -489,16 +647,16 @@ const EntanglementPuzzle = ({ puzzle, anecdotes = [], onCorrect, onIncorrect, di
                     x: isWrong ? [-3, 3, -3, 3, 0] : 0,
                   }}
                   transition={{
-                    delay: 0.5 + index * 0.08,
+                    delay: 0.35 + index * 0.08,
                     duration: isWrong ? 0.4 : 0.3,
                   }}
                   onClick={() => handleLeftClick(target.id)}
                   whileHover={
-                    !disabled && !isMatched && !wrongPair
+                    canClick
                       ? { scale: 1.02, x: 4 }
                       : {}
                   }
-                  whileTap={!disabled && !isMatched ? { scale: 0.98 } : {}}
+                  whileTap={canClick ? { scale: 0.98 } : {}}
                   className={`
                     relative p-3.5 rounded-xl border-2 text-left transition-all duration-200
                     ${isMatched
@@ -509,7 +667,7 @@ const EntanglementPuzzle = ({ puzzle, anecdotes = [], onCorrect, onIncorrect, di
                       ? 'border-glow-red bg-glow-red/10'
                       : 'border-indigo-500/30 bg-quantum-800/50 hover:border-glow-purple/60 hover:bg-quantum-700/50'
                     }
-                    ${disabled || isMatched ? 'cursor-default' : 'cursor-pointer'}
+                    ${!canClick || isMatched ? 'cursor-default' : 'cursor-pointer'}
                   `}
                   style={{
                     boxShadow: isMatched
@@ -518,9 +676,16 @@ const EntanglementPuzzle = ({ puzzle, anecdotes = [], onCorrect, onIncorrect, di
                       ? '0 0 15px rgba(157, 78, 221, 0.4)'
                       : isWrong
                       ? '0 0 15px rgba(255, 46, 99, 0.3)'
+                      : gameMode === 'duo' && currentTurn === 'P1' && !isMatched
+                      ? '0 0 12px rgba(157, 78, 221, 0.2)'
                       : undefined,
                   }}
                 >
+                  {gameMode === 'duo' && (
+                    <div className="absolute -top-2 -left-2 w-6 h-6 rounded-full bg-glow-purple/20 border border-glow-purple/40 flex items-center justify-center text-[10px] font-bold text-glow-purple font-mono">
+                      {p1KeyLabel(index)}
+                    </div>
+                  )}
                   <div className="flex items-start gap-3">
                     <div
                       className={`
@@ -564,18 +729,31 @@ const EntanglementPuzzle = ({ puzzle, anecdotes = [], onCorrect, onIncorrect, di
           <motion.div
             initial={{ opacity: 0, x: 30 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.4 }}
-            className="space-y-2.5"
+            transition={{ delay: 0.3 }}
+            className={`space-y-2.5 ${
+              gameMode === 'duo' && currentTurn === 'P2'
+                ? 'ring-2 ring-glow-orange/40 rounded-2xl p-1 -m-1 transition-all'
+                : ''
+            }`}
           >
             <div className="text-center mb-3">
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-glow-cyan/10 border border-glow-cyan/30">
-                <span className="text-xs font-medium text-glow-cyan">现代概念</span>
+              <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full border ${
+                gameMode === 'duo' && currentTurn === 'P2'
+                  ? 'bg-glow-orange/20 border-glow-orange/50'
+                  : 'bg-glow-cyan/10 border-glow-cyan/30'
+              }`}>
+                <span className={`text-xs font-medium ${
+                  gameMode === 'duo' && currentTurn === 'P2' ? 'text-glow-orange font-bold' : 'text-glow-cyan'
+                }`}>
+                  {gameMode === 'duo' ? '玩家二 · ' : ''}现代概念
+                </span>
               </div>
             </div>
-            {puzzle.options.map((option, index) => {
+            {rightItems.map((option, index) => {
               const isSelected = selectedRight === option.id;
               const isMatched = isRightMatched(option.id);
               const isWrong = wrongPair?.right === option.id;
+              const canClick = canSelectRight() && !isMatched;
 
               return (
                 <motion.div
@@ -589,16 +767,16 @@ const EntanglementPuzzle = ({ puzzle, anecdotes = [], onCorrect, onIncorrect, di
                     x: isWrong ? [3, -3, 3, -3, 0] : 0,
                   }}
                   transition={{
-                    delay: 0.5 + index * 0.08,
+                    delay: 0.35 + index * 0.08,
                     duration: isWrong ? 0.4 : 0.3,
                   }}
                   onClick={() => handleRightClick(option.id)}
                   whileHover={
-                    !disabled && !isMatched && !wrongPair
+                    canClick
                       ? { scale: 1.02, x: -4 }
                       : {}
                   }
-                  whileTap={!disabled && !isMatched ? { scale: 0.98 } : {}}
+                  whileTap={canClick ? { scale: 0.98 } : {}}
                   className={`
                     relative p-3.5 rounded-xl border-2 text-right transition-all duration-200
                     ${isMatched
@@ -609,7 +787,7 @@ const EntanglementPuzzle = ({ puzzle, anecdotes = [], onCorrect, onIncorrect, di
                       ? 'border-glow-red bg-glow-red/10'
                       : 'border-indigo-500/30 bg-quantum-800/50 hover:border-glow-cyan/60 hover:bg-quantum-700/50'
                     }
-                    ${disabled || isMatched ? 'cursor-default' : 'cursor-pointer'}
+                    ${!canClick || isMatched ? 'cursor-default' : 'cursor-pointer'}
                   `}
                   style={{
                     boxShadow: isMatched
@@ -618,9 +796,16 @@ const EntanglementPuzzle = ({ puzzle, anecdotes = [], onCorrect, onIncorrect, di
                       ? '0 0 15px rgba(0, 212, 255, 0.4)'
                       : isWrong
                       ? '0 0 15px rgba(255, 46, 99, 0.3)'
+                      : gameMode === 'duo' && currentTurn === 'P2' && !isMatched
+                      ? '0 0 12px rgba(255, 107, 53, 0.2)'
                       : undefined,
                   }}
                 >
+                  {gameMode === 'duo' && (
+                    <div className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-glow-orange/20 border border-glow-orange/40 flex items-center justify-center text-[10px] font-bold text-glow-orange font-mono">
+                      {p2KeyLabel(index)}
+                    </div>
+                  )}
                   <div className="flex items-start justify-end gap-3">
                     <div>
                       <p className="font-medium text-white text-sm">
@@ -671,7 +856,7 @@ const EntanglementPuzzle = ({ puzzle, anecdotes = [], onCorrect, onIncorrect, di
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.9 }}
+        transition={{ delay: 0.8 }}
         className="mt-6"
       >
         <div className="glass-card p-4">
